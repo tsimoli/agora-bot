@@ -25,11 +25,11 @@ defmodule AgoraBot.Websocket do
   def websocket_handle({:text, message}, _conn, state) do
     message = prepare_message message
     IO.inspect message
-    handle_message(message, get(:status))
+    handle_message(message)
     {:ok, state}
   end
 
-  def handle_message(message, :connecting) do
+  def handle_message(message) do
     case Map.get(message, "op") do
       11 -> IO.puts "PING"
       10 ->
@@ -37,35 +37,28 @@ defmodule AgoraBot.Websocket do
         AgoraBot.Heartbeater.start_heartbeat({:heartbeat, get(:socket), get(:client), heartbeat_interval})
         get(:client).send({:text, Poison.encode!(%AgoraBot.Identify{})}, get(:socket))
         put(%{:heartbeat_interval => heartbeat_interval, :status => :connected})
+      opcode -> type = Map.get(message, "t")
+        Logger.info type
+        case type do
+          "READY" -> IO.puts "READY"
+          "MESSAGE_CREATE" ->
+            content = Map.get(message, "d") |> Map.get("content")
+            if content == "!elo" do
+              channel_id = Map.get(message, "d") |> Map.get("channel_id")
+              url = Application.get_env(:agora_bot, :endpoint) <> Application.get_env(:agora_bot, :channels) <> channel_id <> "/messages"
+              player_to_find = String.split_at(content, " ")[1]
+              IO.puts player_to_find
+              response = HTTPoison.post(url, Poison.encode!(%{content: "TODO: parsing"}),%{"Authorization" => Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
+            else
+              IO.puts "Do nothing"
+            end
+          _ -> IO.inspect type
+        end
     end
   end
 
   def websocket_handle({:ping, data}, _conn, state) do
     {:reply, {:pong, data}, state}
-  end
-
-  def handle_message(message, :connected) do
-    case Map.get(message, "op") do
-      11 -> IO.puts "PING"
-      _ -> type = Map.get(message, "t")
-      Logger.info type
-      case type do
-        "READY" -> IO.puts "READY"
-        "MESSAGE_CREATE" ->
-          if Map.get(message, "d") |> Map.get("content") == "!elo" do
-            channel_id = Map.get(message, "d") |> Map.get("channel_id")
-            IO.puts channel_id
-            url = Application.get_env(:agora_bot, :endpoint) <> Application.get_env(:agora_bot, :channels) <> channel_id <> "/messages"
-            IO.puts url
-            response = HTTPoison.post(url, Poison.encode!(%{content: "TODO: parsing"}),%{"Authorization" => Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
-            IO.inspect response
-          else
-            IO.puts "Do nothing"
-          end
-        _ -> IO.inspect type
-      end
-      IO.puts "LOOPED"
-    end
   end
 
   defp prepare_message(binstring) do
