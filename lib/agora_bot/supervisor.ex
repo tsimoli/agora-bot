@@ -7,6 +7,7 @@ defmodule AgoraBot.Supervisor do
 
   def init(:ok) do
     children = [
+      supervisor(Task.Supervisor, [[name: AgoraBot.TaskSupervisor]]),
       worker(AgoraBot.DiscordClient, [[]]),
       worker(AgoraBot.Heartbeater, [[]])
     ]

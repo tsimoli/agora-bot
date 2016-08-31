@@ -24,7 +24,6 @@ defmodule AgoraBot.Websocket do
 
   def websocket_handle({:text, message}, _conn, state) do
     message = prepare_message message
-    IO.inspect message
     handle_message(message)
     {:ok, state}
   end
@@ -43,12 +42,16 @@ defmodule AgoraBot.Websocket do
           "READY" -> IO.puts "READY"
           "MESSAGE_CREATE" ->
             content = Map.get(message, "d") |> Map.get("content")
-            if content == "!elo" do
+            IO.puts content
+            if String.starts_with?(content, "!elo") do
               channel_id = Map.get(message, "d") |> Map.get("channel_id")
               url = Application.get_env(:agora_bot, :endpoint) <> Application.get_env(:agora_bot, :channels) <> channel_id <> "/messages"
-              player_to_find = String.split_at(content, " ")[1]
-              IO.puts player_to_find
-              response = HTTPoison.post(url, Poison.encode!(%{content: "TODO: parsing"}),%{"Authorization" => Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
+              [prefix, player_to_find] = String.split(content, " ")
+              agora_response = Task.Supervisor.async(AgoraBot.TaskSupervisor, fn ->
+                HTTPoison.get("http://agora.gg/profile/" <> player_to_find)
+              end) |> Task.await()
+              IO.inspect agora_response
+              HTTPoison.post(url, Poison.encode!(%{content: "TODO: parsing"}),%{"Authorization" => Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
             else
               IO.puts "Do nothing"
             end
