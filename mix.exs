@@ -14,7 +14,7 @@ defmodule AgoraBot.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [mod: {AgoraBot, []}, applications: [:logger, :httpoison, :poison, :websocket_client]]
+    [mod: {AgoraBot, []}, applications: [:logger, :httpoison, :poison, :websocket_client, :floki]]
   end
 
   # Dependencies can be Hex packages:

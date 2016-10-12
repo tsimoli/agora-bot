@@ -41,6 +41,7 @@ defmodule AgoraBot.Websocket do
           "MESSAGE_CREATE" ->
             content = Map.get(message, "d") |> Map.get("content")
             if String.starts_with?(content, "!elo") do
+              Logger.info "Fetching elo"
               [prefix, player_to_find] = String.split(content, " ")
               paragon_url = "https://paragon.gg/players/" <> player_to_find
               paragon_response = Task.Supervisor.async(AgoraBot.TaskSupervisor, fn ->
