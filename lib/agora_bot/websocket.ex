@@ -8,12 +8,11 @@ defmodule AgoraBot.Websocket do
     put(%{:client => client})
     :crypto.start()
     :ssl.start()
-    client.start_link("wss://gateway.discord.gg/?v=5&encoding=json", __MODULE__,[], [])
+    client.start_link(String.to_char_list(wss_url <> "/?v=5&encoding=json"), __MODULE__,[], [])
   end
 
   def init(state, socket) do
-    IO.puts "Starting"
-    IO.inspect socket
+    Logger.info "Starting"
     put(%{:socket => socket, :status => :connecting})
     {:ok, state}
   end
@@ -30,38 +29,47 @@ defmodule AgoraBot.Websocket do
 
   def handle_message(message) do
     case Map.get(message, "op") do
-      11 -> IO.puts "PING"
+      11 -> Logger.debug("PING")
       10 ->
         heartbeat_interval = Map.get(message, "d") |> Map.get("heartbeat_interval")
         AgoraBot.Heartbeater.start_heartbeat({:heartbeat, get(:socket), get(:client), heartbeat_interval})
         get(:client).send({:text, Poison.encode!(%AgoraBot.Identify{})}, get(:socket))
         put(%{:heartbeat_interval => heartbeat_interval, :status => :connected})
-      opcode -> type = Map.get(message, "t")
-        Logger.info type
+      _opcode -> type = Map.get(message, "t")
         case type do
-          "READY" -> IO.puts "READY"
+          "READY" -> Logger.info "READY"
           "MESSAGE_CREATE" ->
             content = Map.get(message, "d") |> Map.get("content")
-            IO.puts content
             if String.starts_with?(content, "!elo") do
-              channel_id = Map.get(message, "d") |> Map.get("channel_id")
-              url = Application.get_env(:agora_bot, :endpoint) <> Application.get_env(:agora_bot, :channels) <> channel_id <> "/messages"
               [prefix, player_to_find] = String.split(content, " ")
-              agora_response = Task.Supervisor.async(AgoraBot.TaskSupervisor, fn ->
-                HTTPoison.get("https://paragon.gg/players/" <> player_to_find)
+              paragon_url = "https://paragon.gg/players/" <> player_to_find
+              paragon_response = Task.Supervisor.async(AgoraBot.TaskSupervisor, fn ->
+                HTTPoison.get(paragon_url)
               end) |> Task.await()
-              IO.inspect agora_response
-              HTTPoison.post(url, Poison.encode!(%{content: "TODO: parsing"}),%{"Authorization" => Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
+              elo_and_league = parse_paragon_response(paragon_response)
+              channel_id = Map.get(message, "d") |> Map.get("channel_id")
+              discord_url = Application.get_env(:agora_bot, :endpoint) <> Application.get_env(:agora_bot, :channels) <> channel_id <> "/messages"
+              HTTPoison.post(discord_url, Poison.encode!(%{content: "#{player_to_find} has #{elem(elo_and_league, 0)} elo rating in #{elem(elo_and_league, 1)} #{paragon_url}"}), %{"Authorization" => "Bot " <> Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
             else
-              IO.puts "Do nothing"
+              Logger.info("Ignore")
             end
-          _ -> IO.inspect type
+          _ -> Logger.info("Ignore")
         end
     end
   end
 
   def websocket_handle({:ping, data}, _conn, state) do
     {:reply, {:pong, data}, state}
+  end
+
+  defp parse_paragon_response({:ok, %HTTPoison.Response{status_code: 200, body: body}}) do
+    elo = Floki.find(body, ".elo") |> hd |> elem(2) |> hd
+    league = Floki.find(body, ".rank") |> hd |> elem(2) |> hd
+    {elo, league}
+  end
+
+  defp parse_paragon_response({:error, %HTTPoison.Response{status_code: code}}) do
+    Logger.info("Failed to retrive elo information. Error code #{code}")
   end
 
   defp prepare_message(binstring) do

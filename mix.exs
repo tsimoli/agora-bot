@@ -4,7 +4,7 @@ defmodule AgoraBot.Mixfile do
   def project do
     [app: :agora_bot,
      version: "0.1.0",
-     elixir: "~> 1.4.0-dev",
+     elixir: "~> 1.0",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      deps: deps()]
@@ -30,6 +30,7 @@ defmodule AgoraBot.Mixfile do
     [{:httpoison, "~> 0.9.0"},
      {:poison, "~> 2.0"},
      {:websocket_client, git: "https://github.com/jeremyong/websocket_client"},
-     {:distillery, "~> 0.9"}]
+     {:distillery, "~> 0.10"},
+     {:floki, "~> 0.10.1"}]
   end
 end

@@ -33,5 +33,5 @@ config :agora_bot,
   login: "/auth/login",
   gateway: "/gateway",
   channels: "/channels/",
-  token: "MjE5MzU5MTk4MTU1MjQzNTIx.CqQmIQ.DPfgdWIFfuFLehRWH8QFFZeeGiA"
+  token: "MjM1NjYyODI3MDY1NTczMzc3.Ct-GGg.h1TjJz4ouFHWNyupsG4hvUzoHSw"
 
