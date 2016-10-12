@@ -48,7 +48,7 @@ defmodule AgoraBot.Websocket do
               url = Application.get_env(:agora_bot, :endpoint) <> Application.get_env(:agora_bot, :channels) <> channel_id <> "/messages"
               [prefix, player_to_find] = String.split(content, " ")
               agora_response = Task.Supervisor.async(AgoraBot.TaskSupervisor, fn ->
-                HTTPoison.get("http://agora.gg/profile/" <> player_to_find)
+                HTTPoison.get("https://paragon.gg/players/" <> player_to_find)
               end) |> Task.await()
               IO.inspect agora_response
               HTTPoison.post(url, Poison.encode!(%{content: "TODO: parsing"}),%{"Authorization" => Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
