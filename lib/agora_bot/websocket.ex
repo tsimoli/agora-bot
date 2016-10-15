@@ -31,11 +31,21 @@ defmodule AgoraBot.Websocket do
     case Map.get(message, "op") do
       11 -> Logger.debug("PING")
       10 ->
-        heartbeat_interval = Map.get(message, "d") |> Map.get("heartbeat_interval")
-        AgoraBot.Heartbeater.start_heartbeat({:heartbeat, fetch_from_agent(:socket), fetch_from_agent(:client), heartbeat_interval})
-        fetch_from_agent(:client).send({:text, Poison.encode!(%AgoraBot.Identify{})}, fetch_from_agent(:socket))
-        save_to_agent(%{:heartbeat_interval => heartbeat_interval, :status => :connected})
-      _opcode -> type = Map.get(message, "t")
+        connection_established(message)
+      _opcode -> 
+        handle_channel_messages(message)
+    end
+  end
+
+  defp connection_established(message) do
+    heartbeat_interval = Map.get(message, "d") |> Map.get("heartbeat_interval")
+    AgoraBot.Heartbeater.start_heartbeat({:heartbeat, fetch_from_agent(:socket), fetch_from_agent(:client), heartbeat_interval})
+    fetch_from_agent(:client).send({:text, Poison.encode!(%AgoraBot.Identify{})}, fetch_from_agent(:socket))
+    save_to_agent(%{:heartbeat_interval => heartbeat_interval, :status => :connected})
+  end
+
+  defp handle_channel_messages(message) do
+    type = Map.get(message, "t")
         AgoraBot.Heartbeater.save_last_seq(Map.get(message, "s"))
         case type do
           "READY" -> Logger.info "READY"
@@ -43,21 +53,28 @@ defmodule AgoraBot.Websocket do
             content = Map.get(message, "d") |> Map.get("content")
             if String.starts_with?(content, "!elo") do
               Logger.info "Fetching elo"
-              [prefix, player_to_find] = String.split(content, " ")
+              player_to_find = case String.split(content, " ") do
+                [prefix, player_to_find] -> player_to_find
+                _ -> ""
+              end
               paragon_url = "https://paragon.gg/players/" <> player_to_find
               paragon_response = Task.Supervisor.async(AgoraBot.TaskSupervisor, fn ->
                 HTTPoison.get(paragon_url)
               end) |> Task.await()
-              elo_and_league = parse_paragon_response(paragon_response)
               channel_id = Map.get(message, "d") |> Map.get("channel_id")
               discord_url = Application.get_env(:agora_bot, :endpoint) <> Application.get_env(:agora_bot, :channels) <> channel_id <> "/messages"
-              HTTPoison.post(discord_url, Poison.encode!(%{content: "#{player_to_find} has #{elem(elo_and_league, 0)} elo rating in #{elem(elo_and_league, 1)} #{paragon_url}"}), %{"Authorization" => "Bot " <> Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
+              case parse_paragon_response(paragon_response) do
+                {:ok, {elo, league}} ->
+                  HTTPoison.post(discord_url, Poison.encode!(%{content: "#{player_to_find} has #{elo} elo rating in #{league} #{paragon_url}"}), %{"Authorization" => "Bot " <> Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
+                {:error, reason} ->
+                  HTTPoison.post(discord_url, Poison.encode!(%{content: reason}), %{"Authorization" => "Bot " <> Application.get_env(:agora_bot, :token), "Content-Type" => "application/json"})
+              end
             else
               Logger.info("Ignore")
             end
-          _ -> Logger.info("Ignore")
+          _ -> 
+            Logger.info("Ignore")
         end
-    end
   end
 
   def websocket_handle({:ping, data}, _conn, state) do
@@ -67,11 +84,17 @@ defmodule AgoraBot.Websocket do
   defp parse_paragon_response({:ok, %HTTPoison.Response{status_code: 200, body: body}}) do
     elo = Floki.find(body, ".elo") |> hd |> elem(2) |> hd
     league = Floki.find(body, ".rank") |> hd |> elem(2) |> hd
-    {elo, league}
+    {:ok, {elo, league}}
   end
 
-  defp parse_paragon_response({:error, %HTTPoison.Response{status_code: code}}) do
-    Logger.info("Failed to retrive elo information. Error code #{code}")
+  defp parse_paragon_response({_, %HTTPoison.Response{status_code: code}}) do
+    Logger.error "Search failer with code: #{code}"
+    reason = case code do
+      302 -> "player not found"
+      500 -> "could not connect to server"
+      _ -> "search failed for unknown reason"
+    end
+    {:error, reason}
   end
 
   defp prepare_message(binstring) do
@@ -82,7 +105,7 @@ defmodule AgoraBot.Websocket do
   end
 
   def websocket_terminate(reason, conn, state) do
-    Logger.info "Websocket failed with reason: " <>reason
+    Logger.error "Websocket failed with reason: " <>reason
   end
 
   defp save_to_agent(map) do
