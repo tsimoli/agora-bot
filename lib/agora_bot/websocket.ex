@@ -5,7 +5,7 @@ defmodule AgoraBot.Websocket do
   def start_link(wss_url) do
     Agent.start_link(fn -> Map.new end, name: __MODULE__)
     client = :websocket_client
-    put(%{:client => client})
+    save_to_agent(%{:client => client})
     :crypto.start()
     :ssl.start()
     client.start_link(String.to_char_list(wss_url <> "/?v=5&encoding=json"), __MODULE__,[], [])
@@ -13,7 +13,7 @@ defmodule AgoraBot.Websocket do
 
   def init(state, socket) do
     Logger.info "Starting"
-    put(%{:socket => socket, :status => :connecting})
+    save_to_agent(%{:socket => socket, :status => :connecting})
     {:ok, state}
   end
 
@@ -32,10 +32,11 @@ defmodule AgoraBot.Websocket do
       11 -> Logger.debug("PING")
       10 ->
         heartbeat_interval = Map.get(message, "d") |> Map.get("heartbeat_interval")
-        AgoraBot.Heartbeater.start_heartbeat({:heartbeat, get(:socket), get(:client), heartbeat_interval})
-        get(:client).send({:text, Poison.encode!(%AgoraBot.Identify{})}, get(:socket))
-        put(%{:heartbeat_interval => heartbeat_interval, :status => :connected})
+        AgoraBot.Heartbeater.start_heartbeat({:heartbeat, fetch_from_agent(:socket), fetch_from_agent(:client), heartbeat_interval})
+        fetch_from_agent(:client).send({:text, Poison.encode!(%AgoraBot.Identify{})}, fetch_from_agent(:socket))
+        save_to_agent(%{:heartbeat_interval => heartbeat_interval, :status => :connected})
       _opcode -> type = Map.get(message, "t")
+        AgoraBot.Heartbeater.save_last_seq(Map.get(message, "s"))
         case type do
           "READY" -> Logger.info "READY"
           "MESSAGE_CREATE" ->
@@ -81,14 +82,14 @@ defmodule AgoraBot.Websocket do
   end
 
   def websocket_terminate(reason, conn, state) do
-    Logger.info reason
+    Logger.info "Websocket failed with reason: " <>reason
   end
 
-  def put(map) do
+  defp save_to_agent(map) do
     Agent.update(__MODULE__, &Map.merge(&1, map))
   end
 
-  def get(key) do
+  defp fetch_from_agent(key) do
     Agent.get(__MODULE__, &Map.get(&1, key))
   end
  end
