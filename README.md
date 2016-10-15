@@ -8,7 +8,7 @@ Displays players paragon elo rating on discord channel. Uses paragon.gg rating.
 
 ## Installation
 - mix deps.get
-- add your bot token to confix.exs
+- add your bot token to config.exs
 - build release with distellery.
   - mix release.init
   - mix release
