@@ -4,7 +4,7 @@ Displays players paragon elo rating on discord channel. Uses paragon.gg rating.
 
 ## Usage
 
-!elo <player_name>
+!elo $player_name
 
 ## Installation
 - mix deps.get
@@ -14,9 +14,9 @@ Displays players paragon elo rating on discord channel. Uses paragon.gg rating.
   - mix release
 - run bot
   - rel/agora_bot/bin/agora_bot console/start
-- add bot to your channel https://discordapp.com/oauth2/authorize?client_id=<client_id>&scope=bot&permissions=0
+- add bot to your channel https://discordapp.com/oauth2/authorize?client_id=$client_id&scope=bot&permissions=0
 - try it out!
-  - !elo <player_name>
+  - !elo $player_name
 
 ## Running with docker
 - build release
